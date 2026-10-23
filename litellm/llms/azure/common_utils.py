@@ -889,6 +889,19 @@ class BaseAzureLLM(BaseOpenAILLM):
         if "api-version" not in query_params and api_version:
             query_params["api-version"] = api_version
 
+        if route == "/openai/responses" and BaseAzureLLM._is_azure_v1_api_version(api_version):
+            path: Final = original_url.path.rstrip("/")
+            resource_path: Final = (
+                path.removesuffix("/openai/responses")
+                if path.endswith("/openai/responses")
+                else path.removesuffix("/responses")
+                if path.endswith("/openai/v1/responses")
+                else path
+            )
+            resource_url: Final = str(original_url.copy_with(path=resource_path, query=None))
+            responses_url: Final = f"{ensure_api_route(resource_url, 'openai/v1')}/responses"
+            return str(httpx.URL(responses_url).copy_with(params=query_params))
+
         # Add the path to the base URL
         if route not in api_base:
             new_url = add_path_to_api_base(api_base=api_base, ending_path=route)

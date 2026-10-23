@@ -88,6 +88,40 @@ def setup_mocks(monkeypatch):
     _cached_azure_ad_token_refresh_provider.cache_clear()
 
 
+@pytest.mark.parametrize(
+    ("api_base", "expected_path"),
+    [
+        ("https://gateway.example.com/foundry/openai", "/foundry/openai/openai/v1/responses"),
+        ("https://gateway.example.com/foundry/openai/", "/foundry/openai/openai/v1/responses"),
+        ("https://gateway.example.com/foundry/openai/openai/v1", "/foundry/openai/openai/v1/responses"),
+        ("https://gateway.example.com/foundry/openai/openai/v1/responses", "/foundry/openai/openai/v1/responses"),
+        ("https://gateway.example.com/foundry/openai/openai/responses", "/foundry/openai/openai/v1/responses"),
+        ("https://gateway.example.com/foundry/openai?route=/openai/responses", "/foundry/openai/openai/v1/responses"),
+        ("https://example.openai.azure.com", "/openai/v1/responses"),
+        ("https://example.openai.azure.com/openai/responses", "/openai/v1/responses"),
+    ],
+)
+@pytest.mark.parametrize("api_version", ["v1", "preview", "latest"])
+def test_azure_v1_responses_preserves_the_resource_base_path(
+    api_base: str, expected_path: str, api_version: str
+) -> None:
+    url: Final = httpx.URL(BaseAzureLLM.get_base_azure_url(api_base, {"api_version": api_version}, "/openai/responses"))
+
+    assert url.path == expected_path
+    assert url.params["api-version"] == api_version
+    assert url.params.get("route") == httpx.URL(api_base).params.get("route")
+
+
+def test_azure_dated_responses_keeps_the_legacy_endpoint_and_existing_query() -> None:
+    url: Final = BaseAzureLLM.get_base_azure_url(
+        "https://gateway.example.com/foundry/openai/responses?api-version=2025-04-01-preview&key=example",
+        {"api_version": "2024-02-01"},
+        "/openai/responses",
+    )
+
+    assert url == ("https://gateway.example.com/foundry/openai/responses?api-version=2025-04-01-preview&key=example")
+
+
 def test_initialize_with_api_key(setup_mocks):
     # Test with api_key provided
     result = BaseAzureLLM().initialize_azure_sdk_client(
